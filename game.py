@@ -10,36 +10,43 @@ class Game:
         SUCCESS = 2
         FAILED = 3
     
-    def __init__(self, width:int, height:int, mine_number:int = 0, auto_open = False):
+    def __init__(self, width:int, height:int, mine_number:int = 0, auto_open = False, seed = None):
         self.state = Game.State.PREPARE
         self.record:list[tuple[int, int, int]] = []
         self.width = width
         self.height = height
         self.mine_number = mine_number
         self.__auto_open = auto_open
+        random.seed(seed)
 
         self.__blocks = [[
             Block()
-            for y in range(height)
-        ] for x in range(width) ]
-    
-    def __8_neightbours(self, x:int, y:int):
-        return [
-            (i, j)
-            for i in range(x-1, x+2)
-            if 0<=i<self.width
-            for j in range(y-1, y+2)
-            if 0<=j<self.height
-        ]
-    
+            for _ in range(height)
+        ] for _ in range(width) ]
+
     def iter_block(self, filter = None):
         for l in self.__blocks:
             for block in l:
                 if (filter is None) or filter(block):
                     yield block
+
     def iter_block_with_pos(self, filter = None):
         for x in range(self.width):
             for y in range(self.height):
+                block = self.__blocks[x][y]
+                if (filter is None) or filter(block):
+                    yield block, x, y
+                    
+    def iter_neighbours(self, x_center, y_center, dis = 1, filter = None):
+        for x in range(max(x_center-dis, 0), min(x_center+dis+1, self.width)):
+            for y in range(max(y_center-dis, 0), min(y_center+dis+1, self.height)):
+                block = self.__blocks[x][y]
+                if (filter is None) or filter(block):
+                    yield block
+    
+    def iter_neighbours_with_pos(self, x_center, y_center, dis = 1, filter = None):
+        for x in range(max(x_center-dis, 0), min(x_center+dis+1, self.width)):
+            for y in range(max(y_center-dis, 0), min(y_center+dis+1, self.height)):
                 block = self.__blocks[x][y]
                 if (filter is None) or filter(block):
                     yield block, x, y
@@ -47,6 +54,27 @@ class Game:
     def block(self, x, y):
         return self.__blocks[x][y]
 
+    def count_3bv(self):
+        area = [[-1 for _ in range(self.height)] for _ in range(self.width)]
+        op_label = 0
+        for block, x, y in self.iter_block_with_pos(lambda b: b.value == 0):
+            if area[x][y] != -1: continue
+            stack = [(block, x, y)]
+            while stack:
+                block, x, y = stack.pop()
+                if area[x][y] != -1: continue
+                area[x][y] = op_label
+                for b, nx, ny in self.iter_neighbours_with_pos(x, y):
+                    if block.value == 0: 
+                        stack.append((b, nx, ny))
+            op_label += 1
+        self.bv = op_label
+        self.bv += sum([
+            (area[x][y] == -1) 
+            for _, x, y in self.iter_block_with_pos(
+                lambda b: 1 <= b.value <= 8)
+            ]) 
+    
     def __init_mines(self, x, y):
         assert self.state == Game.State.PREPARE
         for _ in range(self.mine_number):
@@ -62,9 +90,10 @@ class Game:
         ): # 遍历所有非雷区
             assert block.value==0, "@author block init value != 0"
             block.value = sum([
-                int(self.__blocks[nx][ny].value==Block.MINE)
-                for nx, ny in self.__8_neightbours(x,y)
+                int(b.value==Block.MINE)
+                for b in self.iter_neighbours(x,y)
             ])
+        self.count_3bv()
         self.state = Game.State.GAMING
 
     def __game_over(self, end_state:State):
@@ -112,14 +141,13 @@ class Game:
         if block.state!=Block.State.OPENED: # 只能双击自动打开已打开的
             return
         marked_cnt = sum([
-            int(self.__blocks[nx][ny].state == Block.State.MARKED)
-            for nx,ny in self.__8_neightbours(x, y)
+            int(b.state == Block.State.MARKED)
+            for b in self.iter_neighbours(x, y)
         ])
         if marked_cnt < block.value:
             return # 没标记到个数不能打开
         # self.record.append((1, x, y))
-        for nx, ny in self.__8_neightbours(x, y):
-            block = self.__blocks[nx][ny]
+        for block, nx, ny in self.iter_neighbours_with_pos(x, y):
             if block.value!=Block.MINE and block.state==block.State.HIDDEN:
                 # 不是雷、没打开：打开它
                 self.open_one(nx, ny)
@@ -130,8 +158,7 @@ class Game:
     def open_void(self, x:int, y:int):
         if self.state!=Game.State.GAMING:
             return
-        for nx, ny in self.__8_neightbours(x, y):
-            block = self.__blocks[nx][ny]
+        for block, nx, ny in self.iter_neighbours_with_pos(x, y):
             if block.value!=Block.MINE and block.state==block.State.HIDDEN:
                 # 不是雷、没打开：打开之
                 self.open_one(nx, ny)
@@ -153,10 +180,8 @@ class Game:
             case Block.State.QUES:
                 block.state = Block.State.HIDDEN
         if self.__auto_open:
-            for nx, ny in self.__8_neightbours(x, y):
+            for _, nx, ny in self.iter_neighbours_with_pos(x, y):
                 self.open_group(nx, ny)
-
-
 
     def tensorize(self, state_emb=None, value_emb=None):
         return torch.cat([

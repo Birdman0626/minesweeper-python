@@ -9,11 +9,14 @@ class Visualizer:
         self.has_start = False
         self.__root = tk.Tk('Game')
         self.__labels:list[list[tk.Label]] = []
+        block_frame = tk.Frame(self.__root)
+        info_frame = tk.Frame(self.__root)
+        
         for x in range(self.game.width):
             l = []
             for y in range(self.game.height):
                 lbl = tk.Label(
-                    self.__root,text='', bg='gray', 
+                    block_frame,text='', bg='gray', 
                     width=3, height=1,
                     borderwidth=1, relief='solid'
                 )
@@ -24,6 +27,11 @@ class Visualizer:
                 lbl.grid(column=x, row=y)
                 l.append(lbl)
             self.__labels.append(l)
+            
+        self.__mine_left = tk.Label(info_frame, text=f'剩余雷数: {self.game.mine_number}')
+        self.__mine_left.pack()
+        info_frame.pack()
+        block_frame.pack()
 
     def start(self):
         self.has_start = True
@@ -64,6 +72,9 @@ class Visualizer:
             # print(f'\n{cmd}, {cx}, {cy}')
             if cmd == 0 or cmd == 2:
                 self.__update_one(cx, cy)
+                
+            if cmd == 2:
+                self.__mine_left.config(text=f"剩余雷数: {self.game.mine_number}")
 
     def __update_one(self, x:int, y:int):
         blk = self.game.block(x, y)

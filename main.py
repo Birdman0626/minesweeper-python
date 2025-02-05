@@ -11,7 +11,7 @@ def to_record(difficulty):
         (16, 16, 40),
         (30, 16, 99),
     ]
-    game = Game(*difficulty_set[difficulty], auto_open=False)
+    game = Game(*difficulty_set[difficulty], auto_open=True, seed=1919810)
     visualizer = Visualizer(game, True)
     visualizer.start()
     game.log_into('./log.txt')
@@ -41,6 +41,6 @@ def by_cmd():
 
 
 # by_cmd()
-to_record(1)
+to_record(0)
 
 
