@@ -28,7 +28,10 @@ class Visualizer:
                 l.append(lbl)
             self.__labels.append(l)
             
-        self.__mine_left = tk.Label(info_frame, text=f'剩余雷数: {self.game.mine_number}')
+        self.__mine_left = tk.Label(
+            info_frame, 
+            text=f'剩余雷数: {self.game.mine_number}\n{self.game.efficient_click}'
+        )
         self.__mine_left.pack()
         info_frame.pack()
         block_frame.pack()
@@ -38,27 +41,40 @@ class Visualizer:
         self.__root.mainloop()
 
     def __on_button_1(self, event, x, y):
-        l = len(self.game.record)
         if event.state & 0x0080==0:
-            self.game.open_one(x, y)
+            self.game.record(0, x, y)
+            changed = self.game.open_one(x, y)
+            self.update(0, changed)
         else:
-            self.game.open_group(x, y)
-        self.update(l)
+            self.game.record(1, x, y)
+            changed = self.game.open_group(x, y)
+            self.update(1, changed)
 
     def __on_button_3(self, event, x, y):
-        l = len(self.game.record)
         if event.state & 0x0100==0:
-            self.game.mark_one(x, y)
+            self.game.record(2, x, y)
+            changed = self.game.mark_one(x, y)
+            self.update(2, changed)
         else:
-            self.game.open_group(x, y)
-        self.update(l)
+            self.game.record(1, x, y)
+            changed = self.game.open_group(x, y)
+            self.update(1, changed)
     
     def __on_double_button_1(self, x, y):
-        l = len(self.game.record)
-        self.game.open_group(x, y)
-        self.update(l)
+        self.game.record(1, x, y)
+        changed = self.game.open_group(x, y)
+        self.update(1, changed)
 
-    def update(self, old_record_len:int):
+    def update(self, cmd:int, changed:list[tuple[Block, int, int]]):
+        self.game.update_efficient(cmd, changed)
+        for _, cx, cy in changed:
+            # print(f'{cx}, {cy}')
+            self.__update_one(cx, cy)
+        self.__mine_left.config(
+            text=f"剩余雷数: {self.game.mine_number}\n"
+            f"{self.game.efficient_click}"
+        )
+        # 游戏结局显示
         if self.game.state == Game.State.SUCCESS:
             messagebox.showinfo('游戏结束', '你成功了')
         elif self.game.state == Game.State.FAILED:
@@ -68,13 +84,6 @@ class Visualizer:
             ):
                 block.state = Block.State.OPENED
                 self.__update_one(x, y)
-        for cmd, cx, cy in self.game.record[old_record_len:]:
-            # print(f'\n{cmd}, {cx}, {cy}')
-            if cmd == 0 or cmd == 2:
-                self.__update_one(cx, cy)
-                
-            if cmd == 2:
-                self.__mine_left.config(text=f"剩余雷数: {self.game.mine_number}")
 
     def __update_one(self, x:int, y:int):
         blk = self.game.block(x, y)

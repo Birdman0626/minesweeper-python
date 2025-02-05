@@ -1,6 +1,7 @@
 from enum import Enum
 from block import Block, torch
 import random
+from typing import Literal
 
 class Game:
 
@@ -10,19 +11,49 @@ class Game:
         SUCCESS = 2
         FAILED = 3
     
+    class EfficientCounter:
+        def __init__(self):
+            self.bv = 0
+            self.__left = [0, 0]
+            self.__chore = [0, 0]
+            self.__right = [0, 0]
+        def add(self, cmd:int, eff:bool):
+            if cmd==0: self.add_left(eff) # 左
+            elif cmd==1: self.add_chore(eff) # 双
+            elif cmd==2: self.add_right(eff) # 右
+        def add_left(self, eff:bool):
+            self.__left[int(eff)] += 1
+        def add_chore(self, eff:bool):
+            self.__chore[int(eff)] += 1
+        def add_right(self, eff:bool):
+            self.__right[int(eff)] += 1
+        
+        @property
+        def metrix(self): return (
+            self.__left[1]/sum(self.__left),
+            self.__chore[1]/sum(self.__chore),
+            self.__right[1]/sum(self.__right)
+        )
+
+        def __str__(self): return (
+            f'左{self.__left[1]}/{sum(self.__left)}\n'
+            f'双{self.__chore[1]}/{sum(self.__chore)}\n'
+            f'右{self.__right[1]}/{sum(self.__right)}\n'
+        )
+
+
+
     def __init__(self, width:int, height:int, mine_number:int = 0, auto_open = False, seed = None):
         self.state = Game.State.PREPARE
-        self.record:list[tuple[int, int, int]] = []
+        self.__record:list[tuple[int, int, int]] = []
         self.width = width
         self.height = height
         self.mine_number = mine_number
         self.__auto_open = auto_open
+        self.__eff = Game.EfficientCounter()
         random.seed(seed)
 
-        self.__blocks = [[
-            Block()
-            for _ in range(height)
-        ] for _ in range(width) ]
+        self.__blocks = [[Block() for _ in range(height)] for _ in range(width) ]
 
     def iter_block(self, filter = None):
         for l in self.__blocks:
@@ -68,8 +99,8 @@ class Game:
                     if block.value == 0: 
                         stack.append((b, nx, ny))
             op_label += 1
-        self.bv = op_label
-        self.bv += sum([
+        self.__eff.bv = op_label
+        self.__eff.bv += sum([
             (area[x][y] == -1) 
             for _, x, y in self.iter_block_with_pos(
                 lambda b: 1 <= b.value <= 8)
@@ -107,81 +138,181 @@ class Game:
             raise RuntimeError("@Author 怎么Game over还能传进来别的")
         self.state = end_state
 
-    def open_one(self, x:int, y:int):
+    def open_one(self, x:int, y:int)->list[tuple[Block, int, int]]:
+        '''
+        打开(x, y)处
+
+        Params:
+        ---
+            x(int): 坐标
+            y(int): 坐标
+        
+        Returns:
+        ---
+            out(list[Block, int, int]): 所有被打开的格子
+        '''
         # 没初始化先初始化
         if self.state==Game.State.PREPARE:
             self.__init_mines(x, y)
         # 检查无需打开的情况
         if self.state != Game.State.GAMING:
-            return
+            return []
         block = self.__blocks[x][y]
         if block.state!=Block.State.HIDDEN:
-            return
+            return []
         # 打开
         block.state = Block.State.OPENED
+        res = [(block, x, y)]
+        # 特判
         if block.value == 0: # void
-            self.open_void(x, y)
+            res += self.open_void(x, y)
         elif block.value == Block.MINE: # mine
             self.__game_over(Game.State.FAILED)
-            return
-        self.record.append((0, x, y))
+            return [] # game over了是不算的
+        # 自动连开功能
         if self.__auto_open:
-            self.open_group(x, y)
+            res += self.open_group(x, y)
         # 判断胜利
         for block in self.iter_block(lambda b:b.value!=Block.MINE):
             # 遍历所有非雷区
             if block.state != Block.State.OPENED:
-                return
+                return res
         self.__game_over(Game.State.SUCCESS)
+        return res
 
-    def open_group(self, x:int, y:int):
+    def open_group(self, x:int, y:int)->list[tuple[Block, int, int]]:
+        '''
+        双击(x, y)处。要求(x, y)处应当是已经打开的。
+
+        Params:
+        ---
+            x(int): 坐标
+            y(int): 坐标
+        
+        Returns:
+        ---
+            out(list[Block, int, int]): 打开的点  
+        '''
+        # 先判断不用open group的
         if self.state!=Game.State.GAMING:
-            return
+            return []
         block = self.__blocks[x][y]
-        if block.state!=Block.State.OPENED: # 只能双击自动打开已打开的
-            return
+        if block.state!=Block.State.OPENED: 
+            # 只能双击自动打开已打开的
+            return []
+        # 计算周围已标记雷数
         marked_cnt = sum([
             int(b.state == Block.State.MARKED)
             for b in self.iter_neighbours(x, y)
         ])
         if marked_cnt < block.value:
-            return # 没标记到个数不能打开
-        # self.record.append((1, x, y))
-        for block, nx, ny in self.iter_neighbours_with_pos(x, y):
-            if block.value!=Block.MINE and block.state==block.State.HIDDEN:
+            # 没标记到个数不能打开
+            return []
+        # 遍历邻居
+        res:list[tuple[Block, int, int]] = []
+        for b, nx, ny in self.iter_neighbours_with_pos(x, y):
+            if b.value!=Block.MINE and b.state==Block.State.HIDDEN:
                 # 不是雷、没打开：打开它
-                self.open_one(nx, ny)
-            elif block.value!=Block.MINE and block.state==block.State.MARKED:
+                res += self.open_one(nx, ny)
+            elif b.value!=Block.MINE and b.state==Block.State.MARKED:
                 # 不是雷、标记了：误标、炸之
                 self.__game_over(Game.State.FAILED)
+                return res
+        return res
 
-    def open_void(self, x:int, y:int):
+    def open_void(self, x:int, y:int)->list[tuple[Block, int, int]]:
+        '''
+        打开(x, y)处的空. 这里要求(x, y)处已经处于opened状态
+
+        Params:
+        ---
+            x(int): 坐标
+            y(int): 坐标
+        
+        Returns:
+        ---
+            out(list[Block, int, int]): 打开的点  
+        '''
+        assert self.__blocks[x][y].value==0
         if self.state!=Game.State.GAMING:
-            return
+            return []
+        res:list[tuple[Block, int, int]] = []
         for block, nx, ny in self.iter_neighbours_with_pos(x, y):
             if block.value!=Block.MINE and block.state==block.State.HIDDEN:
                 # 不是雷、没打开：打开之
-                self.open_one(nx, ny)
+                res += self.open_one(nx, ny)
+        return res
    
-    def mark_one(self, x:int, y:int):
+    def mark_one(self, x:int, y:int)->list[tuple[Block, int, int]]:
+        '''
+        标记(x, y)处
+
+        Params:
+        ---
+            x(int): 坐标
+            y(int): 坐标
+        
+        Returns:
+        ---
+            out(list[Block, int, int]): 所有标记的点，注意未必是有效更改  
+        '''
         if self.state!=Game.State.GAMING:
-            return 
+            return []
         block = self.__blocks[x][y]
-        self.record.append((2, x, y))
+        res:list[tuple[Block, int, int]] = []
         match block.state:
             case Block.State.OPENED:
-                return
+                return []
             case Block.State.HIDDEN:
                 block.state = Block.State.MARKED
                 self.mine_number -= 1
+                res = [(block, x, y)]
             case Block.State.MARKED:
                 block.state = Block.State.QUES
                 self.mine_number += 1
             case Block.State.QUES:
                 block.state = Block.State.HIDDEN
-        if self.__auto_open:
-            for _, nx, ny in self.iter_neighbours_with_pos(x, y):
-                self.open_group(nx, ny)
+        
+        # # 自动连开功能plus
+        # if self.__auto_open:
+        #     for _, nx, ny in self.iter_neighbours_with_pos(x, y):
+        #         self.open_group(nx, ny)
+        return res
+
+    def update_efficient(self, cmd:int, changed:list[tuple[Block, int, int]]):
+        '''
+        记录本次操作是否有效
+
+        Params:
+        ---
+            cmd: 操作
+            changed: 操作之后改变的方块列表
+        
+        Returns:
+        ---
+            有效点击次数记录值
+        '''
+        for block, _, _ in changed:
+            if block.is_eff_op():
+                # 存在一个有效改变就是有效
+                self.__eff.add(cmd, True)
+                return
+        # 一个有效改变都没干就是没效
+        self.__eff.add(cmd, False)
+        return str(self.__eff)
+    
+    @property
+    def efficient_click(self):
+        return self.__eff
+
+    def record(self, cmd, x, y):
+        '''
+        手动记录一次操作
+
+        Params:
+            cmd, x, y: 操作
+        '''
+        self.__record.append((cmd, x, y))
 
     def tensorize(self, state_emb=None, value_emb=None):
         return torch.cat([
@@ -200,15 +331,17 @@ class Game:
         '''
         click_key = torch.argmax(action[0:3])
         x, y = int(action[3]), int(action[4])
-        l = len(self.record)
+        self.record(click_key, x, y)
+        # l = len(self.__record)
         if click_key == 0:
             self.open_one(x, y)
         elif click_key == 1:
             self.open_group(x, y)
         elif click_key == 2:
             self.mark_one(x, y)
-        if visualizer:
-            visualizer.update(l)
+        # if visualizer:
+        #     visualizer.update(l)
+        #TODO:
 
     
     def log_into(self, log_file):
@@ -224,7 +357,7 @@ class Game:
                 f.write(l+'\n')
             # 操作信息
             f.write('0\n' if self.state==Game.State.SUCCESS else '1\n')
-            for action, x, y in self.record:
+            for action, x, y in self.__record:
                 f.write(f'{action} {x} {y}\n')
 
     @staticmethod
