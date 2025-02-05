@@ -79,7 +79,7 @@ class Visualizer:
             #     image=Block.__FLAG_IMG
             # )
             lbl.config(
-                text='旗', bg='gray',
+                text='🚩', bg='gray',
                 image=None
             )
         elif blk.state == Block.State.QUES:
@@ -94,7 +94,7 @@ class Visualizer:
                 #     image=Block.__MINE_IMG
                 # )
                 lbl.config(
-                    text='雷', bg='white',
+                    text='💣', bg='white',
                     image=None
                 )
             elif blk.value == 0:

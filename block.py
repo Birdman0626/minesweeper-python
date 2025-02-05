@@ -3,9 +3,17 @@ from torch.nn import functional as F
 import torch
 
 NUMBER_COLOR = [
-    "","blue","green","red","darkblue",
-    "darkred","lightblue","black","gray"
+    "",
+    "#0000ff",
+    "#008000",
+    "#ff0000",
+    "#000080",
+    "#800000",
+    "#008080",
+    "#000000",
+    "#808080"
 ]
+
 
 class Block:
     class State(Enum):
