@@ -259,14 +259,13 @@ class Game:
         if self.state!=Game.State.GAMING:
             return []
         block = self.__blocks[x][y]
-        res:list[tuple[Block, int, int]] = []
+        res:list[tuple[Block, int, int]] = [(block, x, y)]
         match block.state:
             case Block.State.OPENED:
-                return []
+                pass
             case Block.State.HIDDEN:
                 block.state = Block.State.MARKED
                 self.mine_number -= 1
-                res = [(block, x, y)]
             case Block.State.MARKED:
                 block.state = Block.State.QUES
                 self.mine_number += 1
