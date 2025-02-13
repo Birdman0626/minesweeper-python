@@ -30,7 +30,7 @@ class Visualizer:
             
         self.__mine_left = tk.Label(
             info_frame, 
-            text=f'剩余雷数: {self.game.mine_number}\n{self.game.efficient_click}'
+            text=f'剩余雷数: {self.game.mine_number}'
         )
         self.__mine_left.pack()
         info_frame.pack()
@@ -70,15 +70,12 @@ class Visualizer:
         for _, cx, cy in changed:
             # print(f'{cx}, {cy}')
             self.__update_one(cx, cy)
-        self.__mine_left.config(
-            text=f"剩余雷数: {self.game.mine_number}\n"
-            f"{self.game.efficient_click}"
-        )
+        self.__mine_left.config(text=f"剩余雷数: {self.game.mine_number}\n")
         # 游戏结局显示
         if self.game.state == Game.State.SUCCESS:
-            messagebox.showinfo('游戏结束', '你成功了')
+            messagebox.showinfo('游戏结束', f'你成功了{self.game.efficient_click}')
         elif self.game.state == Game.State.FAILED:
-            messagebox.showinfo('游戏结束', '你失败了')
+            messagebox.showinfo('游戏结束', f'你失败了{self.game.efficient_click}')
             for block,x,y in self.game.iter_block_with_pos(
                 lambda b:b.value==Block.MINE
             ):
@@ -89,43 +86,16 @@ class Visualizer:
         blk = self.game.block(x, y)
         lbl = self.__labels[x][y]
         if blk.state == Block.State.HIDDEN:
-            lbl.config(
-                text='', bg='gray', 
-                image=None
-            )
+            lbl.config(text='', bg='gray', image=None)
         elif blk.state == Block.State.MARKED:
-            # self.__label.config(
-            #     text='', bg='gray', 
-            #     image=Block.__FLAG_IMG
-            # )
-            lbl.config(
-                text='🚩', bg='gray',
-                image=None
-            )
+            lbl.config(text='🚩', bg='gray', image=None)
         elif blk.state == Block.State.QUES:
-            lbl.config(
-                text='?', bg='gray',
-                image=None
-            )
+            lbl.config(text='?', bg='gray', image=None)
         elif blk.state == Block.State.OPENED:
             if blk.value == Block.MINE:
-                # self.__label.config(
-                #     text='', bg='white',
-                #     image=Block.__MINE_IMG
-                # )
-                lbl.config(
-                    text='💣', bg='white',
-                    image=None
-                )
+                lbl.config(text='💣', bg='white', image=None)
             elif blk.value == 0:
-                lbl.config(
-                    text='', bg='white',
-                    image=None
-                )
+                lbl.config(text='', bg='white', image=None)
             else:
-                lbl.config(
-                    text=str(blk.value), bg='white',
-                    fg=blk.color,
-                    image=None
-                )
+                lbl.config(text=str(blk.value), bg='white', fg=blk.color, image=None)
         
