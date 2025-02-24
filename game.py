@@ -41,70 +41,7 @@ class Game:
             f'右{self.__right[1]}/{sum(self.__right)}\n'
         )
 
-            
-    def solver_count_attr(self, x, y):
-        unprobed = 0
-        absmines = 0
-        for block in self.iter_neighbours(x, y, 1):
-            if block.state == Block.State.HIDDEN: unprobed += 1
-            if block.value == Block.MINE: absmines += 1
-            if block.state == Block.State.MARKED: absmines -= 1
-        return unprobed, absmines
-    
-    def solver_count_unshared(self, xp, yp, xq, yq):
-        unshared = 0
-        for _, x, y in self.iter_neighbours_with_pos(xp, yp, 1, lambda b: b.state == Block.State.HIDDEN):
-            if (abs(x-xq) >= 2) or (abs(y - yq) >= 2): unshared += 1
-        return unshared
-            
-    def solver_infer_dual(self, xp, yp, xq, yq):
-        unprobedp, absminesp = self.solver_count_attr(xp, yp)
-        unprobedq, absminesq = self.solver_count_attr(xq, yq)
-        unsharedq = self.solver_count_unshared(xp, yp, xq, yq)
-        action: int = None
-        if(absminesq - absminesp == unsharedq): action = 0
-        elif (absminesq - absminesp == unsharedq - unprobedp - unprobedq): action = 1
-        if action:
-            modified = False
-            for _, x, y in self.iter_neighbours_with_pos(xp, yp, 1, lambda b: b.state == Block.State.HIDDEN):
-                if (abs(x-xq) >= 2) or (abs(y - yq) >= 2):
-                    modified = True
-                    if action == 0: self.open_one(x, y)
-                    elif action == 1: self.mark_one(x, y)
-            if not modified: action = None
-        return action
-
-    def solver_infer(self):
-        if self.state != Game.State.GAMING: return False
-        if len(self.solver_probed_cells) == 0: return False
-        
-        repush = []
-        ret = None
-        while len(self.solver_probed_cells) > 0:
-            block, xp, yp = self.solver_probed_cells.pop()
-            if block.state == Block.State.OPENED or block.state == Block.State.MARKED:
-                if self.solver_infer_dual(xp, yp, -2, -2):
-                    ret = (xp, yp)
-                    break
-                
-                keep = False
-                stop = False
-                for block, x, y in self.iter_neighbours_with_pos(xp, yp, 2):
-                    if stop: break
-                    if block.state == Block.State.HIDDEN: keep = True
-                    if block.state == Block.State.OPENED or block.state == Block.State.MARKED:
-                        if self.solver_infer_dual(xp, yp, x, y): 
-                            ret = (xp, yp)
-                            stop = True
-                            
-                if keep: repush.append((block, xp, yp))
-                if stop: break
-                
-        self.solver_probed_cells.extend(repush)
-        return ret            
-        
-        
-    def __init__(self, width:int, height:int, mine_number:int = 0, auto_open = False, auto_solve = False, seed = None):
+    def __init__(self, width:int, height:int, mine_number:int = 0, auto_open = False, seed = None):
         self.state = Game.State.PREPARE
         self.__record:list[tuple[int, int, int]] = []
         self.width = width
@@ -113,9 +50,6 @@ class Game:
         self.__auto_open = auto_open
         self.__eff = Game.EfficientCounter()
         random.seed(seed)
-        self.__auto_solve = auto_solve
-        if self.__auto_solve:
-            self.solver_probed_cells = []
         self.__blocks = [[Block() for _ in range(height)] for _ in range(width) ]
 
     def iter_block(self, filter = None):
@@ -134,6 +68,7 @@ class Game:
     def iter_neighbours(self, x_center, y_center, dis = 1, filter = None):
         for x in range(max(x_center-dis, 0), min(x_center+dis+1, self.width)):
             for y in range(max(y_center-dis, 0), min(y_center+dis+1, self.height)):
+                if x == x_center and y == y_center: continue
                 block = self.__blocks[x][y]
                 if (filter is None) or filter(block):
                     yield block
@@ -141,6 +76,7 @@ class Game:
     def iter_neighbours_with_pos(self, x_center, y_center, dis = 1, filter = None):
         for x in range(max(x_center-dis, 0), min(x_center+dis+1, self.width)):
             for y in range(max(y_center-dis, 0), min(y_center+dis+1, self.height)):
+                if x == x_center and y == y_center: continue
                 block = self.__blocks[x][y]
                 if (filter is None) or filter(block):
                     yield block, x, y
@@ -396,14 +332,14 @@ class Game:
         self.record(click_key, x, y)
         # l = len(self.__record)
         if click_key == 0:
-            self.open_one(x, y)
+            res = self.open_one(x, y)
         elif click_key == 1:
-            self.open_group(x, y)
+            res = self.open_group(x, y)
         elif click_key == 2:
-            self.mark_one(x, y)
-        # if visualizer:
-        #     visualizer.update(l)
-        #TODO:
+            res = self.mark_one(x, y)
+        if visualizer:
+            visualizer.update(click_key, res)
+        return res
 
     def log_into(self, log_file):
         assert self.state == Game.State.FAILED or self.state == Game.State.SUCCESS
